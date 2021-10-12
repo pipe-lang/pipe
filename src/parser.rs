@@ -12,6 +12,7 @@ pub enum Lang {
     If(Box<Lang>, Block, Block),
     Number(String),
     Str(String),
+    Variable(String),
 }
 
 pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
@@ -38,6 +39,8 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
         .map(Lang::Str)
         .labelled("string");
 
+    let variable = text::ident().collect::<String>().map(Lang::Variable);
+
     let instruction = recursive(|instruction| {
         let array = instruction
             .clone()
@@ -46,7 +49,13 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
             .map(Lang::Array)
             .labelled("array");
 
-        array.or(boolean).or(str_).or(float).or(number).padded()
+        array
+            .or(boolean)
+            .or(variable)
+            .or(str_)
+            .or(float)
+            .or(number)
+            .padded()
     })
     .labelled("instruction");
 
