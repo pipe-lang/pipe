@@ -2,16 +2,17 @@ use chumsky::prelude::*;
 
 pub type Span = std::ops::Range<usize>;
 
+type Block = Vec<Lang>;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Lang {
+    Array(Block),
     Bool(bool),
     Float(String),
     If(Box<Lang>, Block, Block),
     Number(String),
     Str(String),
 }
-
-type Block = Vec<Lang>;
 
 pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
     let number = text::int(10)
@@ -34,19 +35,25 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
         .ignore_then(filter(|c| *c != '"').repeated())
         .then_ignore(just('"'))
         .collect::<String>()
-        .map(Lang::Str);
+        .map(Lang::Str)
+        .labelled("string");
 
-    let instruction = boolean
-        .or(str_)
-        .or(float)
-        .or(number)
-        .padded()
-        .labelled("instruction");
+    let instruction = recursive(|instruction| {
+        let array = instruction
+            .clone()
+            .repeated()
+            .delimited_by('[', ']')
+            .map(Lang::Array)
+            .labelled("array");
+
+        array.or(boolean).or(str_).or(float).or(number).padded()
+    })
+    .labelled("instruction");
 
     let block = instruction.clone().repeated();
 
     let if_ = seq("if".chars())
-        .ignore_then(instruction.clone().padded())
+        .ignore_then(instruction.clone())
         .then(block.clone())
         .then(seq("else".chars()).ignore_then(block.clone()).or_not())
         .then_ignore(seq("end".chars()))
