@@ -3,7 +3,7 @@ if true
   false
   42
 else
-  4
+  "hola"
 end
 
 23

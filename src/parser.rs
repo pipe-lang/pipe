@@ -8,6 +8,7 @@ pub enum Lang {
     Float(String),
     If(Box<Lang>, Block, Block),
     Number(String),
+    Str(String),
 }
 
 type Block = Vec<Lang>;
@@ -29,7 +30,14 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
 
     let boolean = true_.or(false_).labelled("boolean");
 
+    let str_ = just('"')
+        .ignore_then(filter(|c| *c != '"').repeated())
+        .then_ignore(just('"'))
+        .collect::<String>()
+        .map(Lang::Str);
+
     let instruction = boolean
+        .or(str_)
         .or(float)
         .or(number)
         .padded()
