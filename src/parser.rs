@@ -13,11 +13,13 @@ pub enum Lang {
     Number(String),
     Str(String),
     Variable(String),
-    Binary(Box<Lang>, BinaryOperator, Box<Lang>),
+    Binary(Box<Lang>, Operator, Box<Lang>),
+    Pipe(Box<Lang>, Box<Lang>),
+    Assignation(Vec<Lang>, Box<Lang>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BinaryOperator {
+pub enum Operator {
     Plus,
     Minus,
     Mul,
@@ -25,7 +27,6 @@ pub enum BinaryOperator {
     And,
     Or,
     Equals,
-    Pipe,
 }
 
 pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
@@ -56,14 +57,13 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
 
     let raw_value = boolean.or(variable).or(str_).or(float).or(number);
 
-    let plus = seq("+".chars()).to(BinaryOperator::Plus);
-    let minus = seq("-".chars()).to(BinaryOperator::Minus);
-    let mul = seq("*".chars()).to(BinaryOperator::Mul);
-    let div = seq("/".chars()).to(BinaryOperator::Div);
-    let eq = seq("eq".chars()).to(BinaryOperator::Equals);
-    let or = seq("or".chars()).to(BinaryOperator::Or);
-    let and = seq("and".chars()).to(BinaryOperator::And);
-    let pipe = seq("|".chars()).to(BinaryOperator::Pipe);
+    let plus = seq("+".chars()).to(Operator::Plus);
+    let minus = seq("-".chars()).to(Operator::Minus);
+    let mul = seq("*".chars()).to(Operator::Mul);
+    let div = seq("/".chars()).to(Operator::Div);
+    let eq = seq("eq".chars()).to(Operator::Equals);
+    let or = seq("or".chars()).to(Operator::Or);
+    let and = seq("and".chars()).to(Operator::And);
 
     let instruction = recursive(|instruction| {
         let array = instruction
@@ -75,17 +75,10 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
 
         let atom = raw_value.or(array.clone());
 
-        let pipe = atom
-            .clone()
-            .then(pipe.padded().then(atom).repeated())
-            .foldl(|left, (operator, right)| {
-                Lang::Binary(Box::new(left), operator, Box::new(right))
-            });
-
         let product_operator = mul.or(div).padded();
-        let product = pipe
+        let product = atom
             .clone()
-            .then(product_operator.then(pipe.clone()).repeated())
+            .then(product_operator.then(atom.clone()).repeated())
             .foldl(|left, (operator, right)| {
                 Lang::Binary(Box::new(left), operator, Box::new(right))
             });
@@ -106,7 +99,12 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
                 Lang::Binary(Box::new(left), operator, Box::new(right))
             });
 
-        boolean_op.padded()
+        let pipe = boolean_op
+            .clone()
+            .then(seq("|".chars()).padded().ignore_then(boolean_op).repeated())
+            .foldl(|left, right| Lang::Pipe(Box::new(left), Box::new(right)));
+
+        pipe.padded()
     })
     .labelled("instruction");
 
@@ -129,10 +127,16 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
         })
         .labelled("conditional");
 
-    let declaration = if_;
+    let assignees = variable.padded().repeated();
+    let assignation = assignees
+        .then_ignore(seq("=".chars()).padded())
+        .then(instruction.clone())
+        .map(|(variables, value)| Lang::Assignation(variables, Box::new(value)));
+
+    let declaration = if_.or(assignation);
 
     declaration
-        .or(instruction)
+        .or(instruction.clone())
         .map_with_span(|tok, span| (tok, span))
         .padded()
 }
