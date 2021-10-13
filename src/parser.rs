@@ -13,6 +13,18 @@ pub enum Lang {
     Number(String),
     Str(String),
     Variable(String),
+    Binary(Box<Lang>, BinaryOperator, Box<Lang>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryOperator {
+    Plus,
+    Minus,
+    Mul,
+    Div,
+    And,
+    Or,
+    Equals,
 }
 
 pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
@@ -41,6 +53,16 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
 
     let variable = text::ident().collect::<String>().map(Lang::Variable);
 
+    let raw_value = boolean.or(variable).or(str_).or(float).or(number);
+
+    let plus = seq("+".chars()).to(BinaryOperator::Plus);
+    let minus = seq("-".chars()).to(BinaryOperator::Minus);
+    let mul = seq("*".chars()).to(BinaryOperator::Mul);
+    let div = seq("/".chars()).to(BinaryOperator::Div);
+    let eq = seq("eq".chars()).to(BinaryOperator::Equals);
+    let or = seq("or".chars()).to(BinaryOperator::Or);
+    let and = seq("and".chars()).to(BinaryOperator::And);
+
     let instruction = recursive(|instruction| {
         let array = instruction
             .clone()
@@ -49,13 +71,33 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
             .map(Lang::Array)
             .labelled("array");
 
-        array
-            .or(boolean)
-            .or(variable)
-            .or(str_)
-            .or(float)
-            .or(number)
-            .padded()
+        let atom = raw_value.or(array.clone());
+
+        let product_operator = mul.or(div).padded();
+        let product = atom
+            .clone()
+            .then(product_operator.then(atom.clone()).repeated())
+            .foldl(|left, (operator, right)| {
+                Lang::Binary(Box::new(left), operator, Box::new(right))
+            });
+
+        let sum_operator = plus.or(minus).padded();
+        let sum = product
+            .clone()
+            .then(sum_operator.then(product.clone()).repeated())
+            .foldl(|left, (operator, right)| {
+                Lang::Binary(Box::new(left), operator, Box::new(right))
+            });
+
+        let bool_operator = eq.or(or).or(and).padded();
+        let boolean_op = sum
+            .clone()
+            .then(bool_operator.then(sum.clone()).repeated())
+            .foldl(|left, (operator, right)| {
+                Lang::Binary(Box::new(left), operator, Box::new(right))
+            });
+
+        boolean_op.padded()
     })
     .labelled("instruction");
 
