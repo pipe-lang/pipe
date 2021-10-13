@@ -1,6 +1,8 @@
-1 + 2 * 3 / 4
+1 | it
 
-if [1] - [5 + 1]
+1 + 2 * 3 / 4 | it
+
+if [1] - [5 + 1] | resultado
   false
   42
 else

@@ -25,6 +25,7 @@ pub enum BinaryOperator {
     And,
     Or,
     Equals,
+    Pipe,
 }
 
 pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
@@ -62,6 +63,7 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
     let eq = seq("eq".chars()).to(BinaryOperator::Equals);
     let or = seq("or".chars()).to(BinaryOperator::Or);
     let and = seq("and".chars()).to(BinaryOperator::And);
+    let pipe = seq("|".chars()).to(BinaryOperator::Pipe);
 
     let instruction = recursive(|instruction| {
         let array = instruction
@@ -73,10 +75,17 @@ pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
 
         let atom = raw_value.or(array.clone());
 
-        let product_operator = mul.or(div).padded();
-        let product = atom
+        let pipe = atom
             .clone()
-            .then(product_operator.then(atom.clone()).repeated())
+            .then(pipe.padded().then(atom).repeated())
+            .foldl(|left, (operator, right)| {
+                Lang::Binary(Box::new(left), operator, Box::new(right))
+            });
+
+        let product_operator = mul.or(div).padded();
+        let product = pipe
+            .clone()
+            .then(product_operator.then(pipe.clone()).repeated())
             .foldl(|left, (operator, right)| {
                 Lang::Binary(Box::new(left), operator, Box::new(right))
             });
