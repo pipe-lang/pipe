@@ -1,6 +1,5 @@
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use chumsky::{prelude::*, stream::Stream};
-use std::{collections::HashMap, env, fmt, fs};
+use chumsky::{prelude::*};
+use std::fmt;
 
 pub type Span = std::ops::Range<usize>;
 

@@ -8,7 +8,7 @@ pub enum Value {
     Bool(bool),
     Num(String),
     Str(String),
-    List(Vec<Value>),
+    Array(Vec<Value>),
     Func(String),
 }
 
@@ -19,7 +19,7 @@ impl std::fmt::Display for Value {
             Self::Bool(x) => write!(f, "{}", x),
             Self::Num(x) => write!(f, "{}", x),
             Self::Str(x) => write!(f, "{}", x),
-            Self::List(xs) => write!(
+            Self::Array(xs) => write!(
                 f,
                 "[{}]",
                 xs.iter()
@@ -50,7 +50,7 @@ type Params = Vec<(String, String)>;
 pub enum Expr {
     Error,
     Value(Value),
-    List(Vec<Self>),
+    Array(Vec<Self>),
     Local(String),
     Assignation(Vec<String>, Box<Self>),
     Then(Box<Self>, Box<Self>),
@@ -83,13 +83,14 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
             let assignees = ident.repeated();
             let assignation = assignees
                 .then_ignore(just(Token::Op("=".to_string())))
-                .then(raw_expression)
+                .then(raw_expression.clone())
                 .map(|(variables, value)| Expr::Assignation(variables, Box::new(value)));
 
-            let list = items
+            let array = raw_expression
                 .clone()
+                .repeated()
                 .delimited_by(Token::Ctrl('['), Token::Ctrl(']'))
-                .map(Expr::List);
+                .map(Expr::Array);
 
             let atom = expr
                 .clone()
@@ -97,7 +98,7 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .or(val.clone())
                 .or(assignation)
                 .or(ident.map(Expr::Local))
-                .or(list)
+                .or(array)
                 .or(expr
                     .clone()
                     .delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
