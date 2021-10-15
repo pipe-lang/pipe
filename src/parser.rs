@@ -1,148 +1,208 @@
-use chumsky::prelude::*;
+use chumsky::{prelude::*};
 
-pub type Span = std::ops::Range<usize>;
+use crate::lexer::Token;
 
-type Block = Vec<Lang>;
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Lang {
-    Array(Block),
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Null,
     Bool(bool),
-    Float(String),
-    If(Box<Lang>, Block, Block),
-    Number(String),
+    Num(String),
     Str(String),
-    Variable(String),
-    Binary(Box<Lang>, Operator, Box<Lang>),
-    Pipe(Box<Lang>, Box<Lang>),
-    Assignation(Vec<Lang>, Box<Lang>),
+    List(Vec<Value>),
+    Func(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Operator {
-    Plus,
-    Minus,
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Null => write!(f, "null"),
+            Self::Bool(x) => write!(f, "{}", x),
+            Self::Num(x) => write!(f, "{}", x),
+            Self::Str(x) => write!(f, "{}", x),
+            Self::List(xs) => write!(
+                f,
+                "[{}]",
+                xs.iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Func(name) => write!(f, "<function: {}>", name),
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub enum BinaryOp {
+    Add,
+    Sub,
     Mul,
     Div,
+    Eq,
+    NotEq,
     And,
     Or,
-    Equals,
+    Xor,
 }
 
-pub fn instruction() -> impl Parser<char, (Lang, Span), Error = Simple<char>> {
-    let number = text::int(10)
-        .collect::<String>()
-        .map(Lang::Number)
-        .labelled("number");
+type Params = Vec<(String, String)>;
 
-    let float = text::int(10)
-        .chain::<char, _, _>(just('.').chain(text::digits(10)))
-        .collect::<String>()
-        .map(Lang::Float)
-        .labelled("float");
+#[derive(Debug)]
+pub enum Expr {
+    Error,
+    Value(Value),
+    List(Vec<Self>),
+    Local(String),
+    Assignation(Vec<String>, Box<Self>),
+    Then(Box<Self>, Box<Self>),
+    Binary(Box<Self>, BinaryOp, Box<Self>),
+    Pipe(Box<Self>, Box<Self>),
+    Call(Box<Self>, Vec<Self>),
+    If(Box<Self>, Vec<Self>, Vec<Self>),
+    Function(String, Params, Box<Expr>),
+}
 
-    let true_ = seq("true".chars()).to(Lang::Bool(true)).labelled("true");
-    let false_ = seq("false".chars()).to(Lang::Bool(false)).labelled("false");
+pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+    recursive(|expr| {
+        let raw_expression = recursive(|raw_expression| {
+            let val = filter_map(|span, tok| match tok {
+                Token::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
+                Token::Num(n) => Ok(Expr::Value(Value::Num(n))),
+                Token::Str(s) => Ok(Expr::Value(Value::Str(s))),
+                _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+            })
+            .labelled("value");
 
-    let boolean = true_.or(false_).labelled("boolean");
+            let ident = filter_map(|span, tok| match tok {
+                Token::Ident(ident) => Ok(ident.clone()),
+                _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+            })
+            .labelled("identifier");
 
-    let str_ = just('"')
-        .ignore_then(filter(|c| *c != '"').repeated())
-        .then_ignore(just('"'))
-        .collect::<String>()
-        .map(Lang::Str)
-        .labelled("string");
+            let items = expr.clone().repeated();
 
-    let variable = text::ident().collect::<String>().map(Lang::Variable);
+            let assignees = ident.repeated();
+            let assignation = assignees
+                .then_ignore(just(Token::Op("=".to_string())))
+                .then(raw_expression)
+                .map(|(variables, value)| Expr::Assignation(variables, Box::new(value)));
 
-    let raw_value = boolean.or(variable).or(str_).or(float).or(number);
+            let list = items
+                .clone()
+                .delimited_by(Token::Ctrl('['), Token::Ctrl(']'))
+                .map(Expr::List);
 
-    let plus = seq("+".chars()).to(Operator::Plus);
-    let minus = seq("-".chars()).to(Operator::Minus);
-    let mul = seq("*".chars()).to(Operator::Mul);
-    let div = seq("/".chars()).to(Operator::Div);
-    let eq = seq("eq".chars()).to(Operator::Equals);
-    let or = seq("or".chars()).to(Operator::Or);
-    let and = seq("and".chars()).to(Operator::And);
+            let atom = expr
+                .clone()
+                .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
+                .or(val.clone())
+                .or(assignation)
+                .or(ident.map(Expr::Local))
+                .or(list)
+                .or(expr
+                    .clone()
+                    .delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
+                .recover_with(nested_delimiters(
+                    Token::Ctrl('('),
+                    Token::Ctrl(')'),
+                    [
+                        (Token::Ctrl('{'), Token::Ctrl('}')),
+                        (Token::Ctrl('['), Token::Ctrl(']')),
+                    ],
+                    || Expr::Error,
+                ));
 
-    let instruction = recursive(|instruction| {
-        let array = instruction
-            .clone()
+            let call = atom
+                .then(
+                    items
+                        .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
+                        .repeated(),
+                )
+                .foldl(|f, args| Expr::Call(Box::new(f), args));
+
+            let op = just(Token::Op("*".to_string()))
+                .to(BinaryOp::Mul)
+                .or(just(Token::Op("/".to_string())).to(BinaryOp::Div));
+            let product = call
+                .clone()
+                .then(op.then(call).repeated())
+                .foldl(|a, (op, b)| Expr::Binary(Box::new(a), op, Box::new(b)));
+
+            let op = just(Token::Op("+".to_string()))
+                .to(BinaryOp::Add)
+                .or(just(Token::Op("-".to_string())).to(BinaryOp::Sub));
+            let sum = product
+                .clone()
+                .then(op.then(product).repeated())
+                .foldl(|a, (op, b)| Expr::Binary(Box::new(a), op, Box::new(b)));
+
+            let op = just(Token::And)
+                .to(BinaryOp::And)
+                .or(just(Token::Or).to(BinaryOp::Or))
+                .or(just(Token::Xor).to(BinaryOp::Xor))
+                .or(just(Token::Eq).to(BinaryOp::Eq))
+                .or(just(Token::Op("!=".to_string())).to(BinaryOp::NotEq));
+
+            let compare = sum
+                .clone()
+                .then(op.then(sum).repeated())
+                .foldl(|a, (op, b)| Expr::Binary(Box::new(a), op, Box::new(b)));
+
+            let pipe = compare
+                .clone()
+                .then(just(Token::Pipe).ignore_then(compare).repeated())
+                .foldl(|left, right| Expr::Pipe(Box::new(left), Box::new(right)));
+
+            pipe
+        });
+
+        let block = expr.clone().repeated();
+
+        let if_ = just(Token::If)
+            .ignore_then(raw_expression.clone())
+            .then(block.clone())
+            .then(just(Token::Else).ignore_then(block.clone()).or_not())
+            .then_ignore(just(Token::End))
+            .map(|((conditional, a), b)| {
+                Expr::If(
+                    Box::new(conditional),
+                    a,
+                    match b {
+                        Some(b) => b,
+                        None => vec![],
+                    },
+                )
+            });
+
+        let ident = filter_map(|span, tok| match tok {
+            Token::Ident(ident) => Ok(ident.clone()),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        });
+
+        let kind = filter_map(|span, tok| match tok {
+            Token::Kind(ident) => Ok(ident.clone()),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        }).labelled("Type");
+
+        let params = ident.clone().labelled("param name")
+            .then(just(Token::Ctrl(':')).ignore_then(kind))
             .repeated()
-            .delimited_by('[', ']')
-            .map(Lang::Array)
-            .labelled("array");
+            .labelled("parameters");
 
-        let atom = raw_value.or(array.clone());
+        let function = ident.clone()
+            .labelled("function name")
+            .then(params.delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
+            .then(expr)
+            .then_ignore(just(Token::End))
+            .map(|((name, params), instructions)| Expr::Function(name, params, Box::new(instructions)))
+            .labelled("function");
 
-        let product_operator = mul.or(div).padded();
-        let product = atom
+        let block_expr = function.or(if_).or(raw_expression.clone()).labelled("block");
+
+        let block_chain = block_expr
             .clone()
-            .then(product_operator.then(atom.clone()).repeated())
-            .foldl(|left, (operator, right)| {
-                Lang::Binary(Box::new(left), operator, Box::new(right))
-            });
+            .then(block_expr.clone().repeated())
+            .foldl(|a, b| Expr::Then(Box::new(a), Box::new(b)));
 
-        let sum_operator = plus.or(minus).padded();
-        let sum = product
-            .clone()
-            .then(sum_operator.then(product.clone()).repeated())
-            .foldl(|left, (operator, right)| {
-                Lang::Binary(Box::new(left), operator, Box::new(right))
-            });
-
-        let bool_operator = eq.or(or).or(and).padded();
-        let boolean_op = sum
-            .clone()
-            .then(bool_operator.then(sum.clone()).repeated())
-            .foldl(|left, (operator, right)| {
-                Lang::Binary(Box::new(left), operator, Box::new(right))
-            });
-
-        let pipe = boolean_op
-            .clone()
-            .then(seq("|".chars()).padded().ignore_then(boolean_op).repeated())
-            .foldl(|left, right| Lang::Pipe(Box::new(left), Box::new(right)));
-
-        pipe.padded()
+        block_chain
     })
-    .labelled("instruction");
-
-    let block = instruction.clone().repeated();
-
-    let if_ = seq("if".chars())
-        .ignore_then(instruction.clone())
-        .then(block.clone())
-        .then(seq("else".chars()).ignore_then(block.clone()).or_not())
-        .then_ignore(seq("end".chars()))
-        .map(|((condition, consequent), alternative)| {
-            Lang::If(
-                Box::new(condition),
-                consequent,
-                match alternative {
-                    Some(alternative) => alternative,
-                    None => vec![],
-                },
-            )
-        })
-        .labelled("conditional");
-
-    let assignees = variable.padded().repeated();
-    let assignation = assignees
-        .then_ignore(seq("=".chars()).padded())
-        .then(instruction.clone())
-        .map(|(variables, value)| Lang::Assignation(variables, Box::new(value)));
-
-    let declaration = if_.or(assignation);
-
-    declaration
-        .or(instruction.clone())
-        .map_with_span(|tok, span| (tok, span))
-        .padded()
-}
-
-pub fn lexer() -> impl Parser<char, Vec<(Lang, Span)>, Error = Simple<char>> {
-    let block = instruction().repeated();
-
-    block.then_ignore(end())
 }
