@@ -5,29 +5,21 @@ use crate::lexer::Token;
 type Params = Vec<(String, String)>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Value {
-    Null,
-    Bool(bool),
-    Num(String),
-    Str(String),
-    Array(Vec<Value>),
-    Func(String),
-    Struct(String, Vec<StructAttr>),
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Array(Vec<Self>),
     Assignation(Vec<String>, Box<Self>),
     Binary(Box<Self>, BinaryOp, Box<Self>),
+    Bool(bool),
     Call(Box<Self>, Vec<Self>),
     Error,
     Function(String, Params, Box<Expr>),
     If(Box<Self>, Vec<Self>, Vec<Self>),
+    Num(String),
     Pipe(Box<Self>, Box<Self>),
+    Str(String),
+    Struct(String, Vec<StructAttr>),
     StructDef(String, Params),
     Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
-    Value(Value),
     Variable(String),
 }
 
@@ -85,9 +77,9 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
         let raw_expression = recursive(|raw_expression| {
             let val = filter_map(|span, tok| match tok {
-                Token::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
-                Token::Num(n) => Ok(Expr::Value(Value::Num(n))),
-                Token::Str(s) => Ok(Expr::Value(Value::Str(s))),
+                Token::Bool(x) => Ok(Expr::Bool(x)),
+                Token::Num(n) => Ok(Expr::Num(n)),
+                Token::Str(s) => Ok(Expr::Str(s)),
                 _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
             })
             .labelled("value");
@@ -117,7 +109,7 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
             let struct_value = kind.clone()
                 .then(attributes.delimited_by(Token::Ctrl('{'), Token::Ctrl('}')))
-                .map(|(name, attributes)| Expr::Value(Value::Struct(name, attributes)));
+                .map(|(name, attributes)| Expr::Struct(name, attributes));
 
             let atom = expr
                 .clone()
