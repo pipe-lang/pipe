@@ -25,7 +25,7 @@ impl std::fmt::Display for Value {
                 xs.iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(" ")
             ),
             Self::Func(name) => write!(f, "<function: {}>", name),
         }
@@ -56,6 +56,7 @@ pub enum Expr {
     Function(String, Params, Box<Expr>),
     If(Box<Self>, Vec<Self>, Vec<Self>),
     Pipe(Box<Self>, Box<Self>),
+    Struct(String, Params),
     Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
     Value(Value),
     Variable(String),
@@ -191,13 +192,19 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
         let function = ident.clone()
             .labelled("function name")
-            .then(params.delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
+            .then(params.clone().delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
             .then(expr)
             .then_ignore(just(Token::End))
             .map(|((name, params), instructions)| Expr::Function(name, params, Box::new(instructions)))
             .labelled("function");
 
-        let block_expr = function.or(if_).or(raw_expression.clone()).labelled("block");
+        let struct_ = kind.clone().labelled("struct name")
+            .then(params.clone().labelled("struct params"))
+            .then_ignore(just(Token::End))
+            .labelled("struct")
+            .map(|(name, params)| Expr::Struct(name, params));
+
+        let block_expr = function.or(struct_).or(if_).or(raw_expression.clone()).labelled("block");
 
         let block_chain = block_expr
             .clone()
