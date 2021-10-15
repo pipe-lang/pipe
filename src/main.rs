@@ -1,23 +1,35 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use chumsky::prelude::*;
+use chumsky::{prelude::*, stream::Stream};
 use std::{env, fs};
 
 pub type Span = std::ops::Range<usize>;
 
+mod lexer;
 mod parser;
-
-use parser::lexer;
 
 fn main() {
     let src = fs::read_to_string(env::args().nth(1).expect("Expected file argument"))
         .expect("Failed to read file");
 
-    let (tokens, errs) = lexer().parse_recovery(src.as_str());
+    let (tokens, errs) = lexer::lexer().parse_recovery(src.as_str());
 
     println!("{:?}", tokens);
 
+    let parse_errs = if let Some(tokens) = tokens {
+        let len = src.chars().count();
+        let (ast, parse_errs) = lexer::expr_parser()
+            .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+
+        println!("{:#?}", ast);
+
+        parse_errs
+    } else {
+        Vec::new()
+    };
+
     errs.into_iter()
         .map(|e| e.map(|c| c.to_string()))
+        .chain(parse_errs.into_iter().map(|e| e.map(|tok| tok.to_string())))
         .for_each(|e| {
             let report = Report::build(ReportKind::Error, (), e.span().start)
                 .with_code(3)
