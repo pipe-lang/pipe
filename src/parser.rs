@@ -34,13 +34,13 @@ impl std::fmt::Display for Value {
 #[derive(Clone, Debug)]
 pub enum BinaryOp {
     Add,
-    Sub,
-    Mul,
+    And,
     Div,
     Eq,
+    Mul,
     NotEq,
-    And,
     Or,
+    Sub,
     Xor,
 }
 
@@ -48,17 +48,17 @@ type Params = Vec<(String, String)>;
 
 #[derive(Debug)]
 pub enum Expr {
-    Error,
-    Value(Value),
     Array(Vec<Self>),
-    Local(String),
     Assignation(Vec<String>, Box<Self>),
-    Then(Box<Self>, Box<Self>),
     Binary(Box<Self>, BinaryOp, Box<Self>),
-    Pipe(Box<Self>, Box<Self>),
     Call(Box<Self>, Vec<Self>),
-    If(Box<Self>, Vec<Self>, Vec<Self>),
+    Error,
     Function(String, Params, Box<Expr>),
+    If(Box<Self>, Vec<Self>, Vec<Self>),
+    Pipe(Box<Self>, Box<Self>),
+    Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
+    Value(Value),
+    Variable(String),
 }
 
 pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
@@ -97,7 +97,7 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
                 .or(val.clone())
                 .or(assignation)
-                .or(ident.map(Expr::Local))
+                .or(ident.map(Expr::Variable))
                 .or(array)
                 .or(expr
                     .clone()
