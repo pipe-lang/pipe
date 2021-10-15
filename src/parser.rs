@@ -2,6 +2,8 @@ use chumsky::{prelude::*};
 
 use crate::lexer::Token;
 
+type Params = Vec<(String, String)>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Null,
@@ -10,28 +12,52 @@ pub enum Value {
     Str(String),
     Array(Vec<Value>),
     Func(String),
+    Struct(String, Vec<StructAttr>),
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::Null => write!(f, "null"),
-            Self::Bool(x) => write!(f, "{}", x),
-            Self::Num(x) => write!(f, "{}", x),
-            Self::Str(x) => write!(f, "{}", x),
-            Self::Array(xs) => write!(
-                f,
-                "[{}]",
-                xs.iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-            Self::Func(name) => write!(f, "<function: {}>", name),
-        }
-    }
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Array(Vec<Self>),
+    Assignation(Vec<String>, Box<Self>),
+    Binary(Box<Self>, BinaryOp, Box<Self>),
+    Call(Box<Self>, Vec<Self>),
+    Error,
+    Function(String, Params, Box<Expr>),
+    If(Box<Self>, Vec<Self>, Vec<Self>),
+    Pipe(Box<Self>, Box<Self>),
+    StructDef(String, Params),
+    Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
+    Value(Value),
+    Variable(String),
 }
-#[derive(Clone, Debug)]
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum StructAttr {
+    Named(String, Expr),
+    Value(Expr)
+}
+
+// impl std::fmt::Display for Value {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match self {
+//             Self::Null => write!(f, "null"),
+//             Self::Bool(x) => write!(f, "{}", x),
+//             Self::Num(x) => write!(f, "{}", x),
+//             Self::Str(x) => write!(f, "{}", x),
+//             Self::Array(xs) => write!(
+//                 f,
+//                 "[{}]",
+//                 xs.iter()
+//                     .map(|x| x.to_string())
+//                     .collect::<Vec<_>>()
+//                     .join(" ")
+//             ),
+//             Self::Func(name) => write!(f, "<function: {}>", name),
+//         }
+//     }
+// }
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
     Add,
     And,
@@ -44,26 +70,19 @@ pub enum BinaryOp {
     Xor,
 }
 
-type Params = Vec<(String, String)>;
-
-#[derive(Debug)]
-pub enum Expr {
-    Array(Vec<Self>),
-    Assignation(Vec<String>, Box<Self>),
-    Binary(Box<Self>, BinaryOp, Box<Self>),
-    Call(Box<Self>, Vec<Self>),
-    Error,
-    Function(String, Params, Box<Expr>),
-    If(Box<Self>, Vec<Self>, Vec<Self>),
-    Pipe(Box<Self>, Box<Self>),
-    Struct(String, Params),
-    Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
-    Value(Value),
-    Variable(String),
-}
-
 pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     recursive(|expr| {
+        let ident = filter_map(|span, tok| match tok {
+            Token::Ident(ident) => Ok(ident.clone()),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        })
+        .labelled("identifier");
+
+        let kind = filter_map(|span, tok| match tok {
+            Token::Kind(ident) => Ok(ident.clone()),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        }).labelled("Type");
+
         let raw_expression = recursive(|raw_expression| {
             let val = filter_map(|span, tok| match tok {
                 Token::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
@@ -72,12 +91,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
             })
             .labelled("value");
-
-            let ident = filter_map(|span, tok| match tok {
-                Token::Ident(ident) => Ok(ident.clone()),
-                _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-            })
-            .labelled("identifier");
 
             let items = expr.clone().repeated();
 
@@ -93,10 +106,24 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .delimited_by(Token::Ctrl('['), Token::Ctrl(']'))
                 .map(Expr::Array);
 
+            let attr_named = ident.clone().labelled("attribute name")
+                .then(just(Token::Ctrl(':')).ignore_then(raw_expression.clone()))
+                .map(|(name, value)| StructAttr::Named(name, value));
+
+            let attr_value = raw_expression.clone()
+                .map(|exp| StructAttr::Value(exp));
+
+            let attributes = attr_named.or(attr_value).repeated();
+
+            let struct_value = kind.clone()
+                .then(attributes.delimited_by(Token::Ctrl('{'), Token::Ctrl('}')))
+                .map(|(name, attributes)| Expr::Value(Value::Struct(name, attributes)));
+
             let atom = expr
                 .clone()
                 .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
                 .or(val.clone())
+                .or(struct_value)
                 .or(assignation)
                 .or(ident.map(Expr::Variable))
                 .or(array)
@@ -175,16 +202,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 )
             });
 
-        let ident = filter_map(|span, tok| match tok {
-            Token::Ident(ident) => Ok(ident.clone()),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        });
-
-        let kind = filter_map(|span, tok| match tok {
-            Token::Kind(ident) => Ok(ident.clone()),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        }).labelled("Type");
-
         let params = ident.clone().labelled("param name")
             .then(just(Token::Ctrl(':')).ignore_then(kind))
             .repeated()
@@ -201,8 +218,8 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         let struct_ = kind.clone().labelled("struct name")
             .then(params.clone().labelled("struct params"))
             .then_ignore(just(Token::End))
-            .labelled("struct")
-            .map(|(name, params)| Expr::Struct(name, params));
+            .labelled("struct definition")
+            .map(|(name, params)| Expr::StructDef(name, params));
 
         let block_expr = function.or(struct_).or(if_).or(raw_expression.clone()).labelled("block");
 

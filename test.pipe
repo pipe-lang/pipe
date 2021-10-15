@@ -1,6 +1,6 @@
-1 | it
+a = 1 | it
 
-1 + 2 * 3 / 4 | it
+a b = 1 + 2 * 3 / 4 | it | split
 
 if [1] - [5 + 1] | resultado
   false
@@ -13,6 +13,10 @@ end
 
 [1 + 1] + [2 - [1]]
 
-[1 [2]]
 
-hola
+Pet
+  name: String
+  age: Number
+end
+
+one = Pet { name: Nemo 1 }
