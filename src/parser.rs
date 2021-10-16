@@ -19,7 +19,7 @@ pub enum Expr {
     Str(String),
     Struct(String, Vec<StructAttr>),
     StructDef(String, Params),
-    Then(Box<Self>, Box<Self>), // NOTE: How to turn this into a Block(Vec<Seff>) instead?
+    Block(Vec<Self>),
     Variable(String),
 }
 
@@ -28,26 +28,6 @@ pub enum StructAttr {
     Named(String, Expr),
     Value(Expr)
 }
-
-// impl std::fmt::Display for Value {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         match self {
-//             Self::Null => write!(f, "null"),
-//             Self::Bool(x) => write!(f, "{}", x),
-//             Self::Num(x) => write!(f, "{}", x),
-//             Self::Str(x) => write!(f, "{}", x),
-//             Self::Array(xs) => write!(
-//                 f,
-//                 "[{}]",
-//                 xs.iter()
-//                     .map(|x| x.to_string())
-//                     .collect::<Vec<_>>()
-//                     .join(" ")
-//             ),
-//             Self::Func(name) => write!(f, "<function: {}>", name),
-//         }
-//     }
-// }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
@@ -96,7 +76,8 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .clone()
                 .repeated()
                 .delimited_by(Token::Ctrl('['), Token::Ctrl(']'))
-                .map(Expr::Array);
+                .map(Expr::Array)
+                .labelled("array");
 
             let attr_named = ident.clone().labelled("attribute name")
                 .then(just(Token::Ctrl(':')).ignore_then(raw_expression.clone()))
@@ -217,8 +198,10 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
         let block_chain = block_expr
             .clone()
-            .then(block_expr.clone().repeated())
-            .foldl(|a, b| Expr::Then(Box::new(a), Box::new(b)));
+            .repeated()
+            .at_least(1)
+            .collect::<Vec<Expr>>()
+            .map(Expr::Block);
 
         block_chain
     })
