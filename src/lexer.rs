@@ -21,6 +21,7 @@ pub enum Token {
     Xor,
     Pipe,
     End,
+    Newline,
 }
 
 impl fmt::Display for Token {
@@ -42,6 +43,7 @@ impl fmt::Display for Token {
             Token::Xor => write!(f, "xor"),
             Token::Pipe => write!(f, "|"),
             Token::End => write!(f, "end"),
+            Token::Newline => write!(f, "\n"),
         }
     }
 }
@@ -68,6 +70,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     let pipe = just('|').to(Token::Pipe);
 
+    let newline = text::newline()
+        .chain(text::newline().repeated())
+        .to(Token::Newline);
+
     let ident = text::ident()
         .collect::<String>()
         .map(|ident| match ident.as_str() {
@@ -86,7 +92,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     let kind = kind().collect::<String>().map(|kind| Token::Kind(kind));
 
-    let token = num
+    let token = newline
+        .or(num)
         .or(str_)
         .or(op)
         .or(ctrl)
@@ -97,7 +104,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     token
         .map_with_span(|tok, span| (tok, span))
-        .padded()
+        .padded_by(text::whitespace_but_newline())
         .repeated()
 }
 
