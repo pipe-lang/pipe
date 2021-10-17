@@ -1,4 +1,4 @@
-use chumsky::{prelude::*};
+use chumsky::prelude::*;
 use std::fmt;
 
 pub type Span = std::ops::Range<usize>;
@@ -84,9 +84,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             _ => Token::Ident(ident),
         });
 
-    let kind = kind()
-        .collect::<String>()
-        .map(|kind| Token::Kind(kind) );
+    let kind = kind().collect::<String>().map(|kind| Token::Kind(kind));
 
     let token = num
         .or(str_)

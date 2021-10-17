@@ -1,4 +1,4 @@
-use chumsky::{prelude::*};
+use chumsky::prelude::*;
 
 use crate::lexer::Token;
 
@@ -26,19 +26,19 @@ pub enum Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum StructAttr {
     Named(String, Expr),
-    Value(Expr)
+    Value(Expr),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
     Add,
     And,
+    Sub,
     Div,
-    Eq,
     Mul,
+    Eq,
     NotEq,
     Or,
-    Sub,
     Xor,
 }
 
@@ -53,7 +53,8 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         let kind = filter_map(|span, tok| match tok {
             Token::Kind(ident) => Ok(ident.clone()),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        }).labelled("Type");
+        })
+        .labelled("Type");
 
         let raw_expression = recursive(|raw_expression| {
             let val = filter_map(|span, tok| match tok {
@@ -79,16 +80,18 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .map(Expr::Array)
                 .labelled("array");
 
-            let attr_named = ident.clone().labelled("attribute name")
+            let attr_named = ident
+                .clone()
+                .labelled("attribute name")
                 .then(just(Token::Ctrl(':')).ignore_then(raw_expression.clone()))
                 .map(|(name, value)| StructAttr::Named(name, value));
 
-            let attr_value = raw_expression.clone()
-                .map(|exp| StructAttr::Value(exp));
+            let attr_value = raw_expression.clone().map(|exp| StructAttr::Value(exp));
 
             let attributes = attr_named.or(attr_value).repeated();
 
-            let struct_value = kind.clone()
+            let struct_value = kind
+                .clone()
                 .then(attributes.delimited_by(Token::Ctrl('{'), Token::Ctrl('}')))
                 .map(|(name, attributes)| Expr::Struct(name, attributes));
 
@@ -175,26 +178,41 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 )
             });
 
-        let params = ident.clone().labelled("param name")
+        let params = ident
+            .clone()
+            .labelled("param name")
             .then(just(Token::Ctrl(':')).ignore_then(kind))
             .repeated()
             .labelled("parameters");
 
-        let function = ident.clone()
+        let function = ident
+            .clone()
             .labelled("function name")
-            .then(params.clone().delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
+            .then(
+                params
+                    .clone()
+                    .delimited_by(Token::Ctrl('('), Token::Ctrl(')')),
+            )
             .then(expr)
             .then_ignore(just(Token::End))
-            .map(|((name, params), instructions)| Expr::Function(name, params, Box::new(instructions)))
+            .map(|((name, params), instructions)| {
+                Expr::Function(name, params, Box::new(instructions))
+            })
             .labelled("function");
 
-        let struct_ = kind.clone().labelled("struct name")
+        let struct_ = kind
+            .clone()
+            .labelled("struct name")
             .then(params.clone().labelled("struct params"))
             .then_ignore(just(Token::End))
             .labelled("struct definition")
             .map(|(name, params)| Expr::StructDef(name, params));
 
-        let block_expr = function.or(struct_).or(if_).or(raw_expression.clone()).labelled("block");
+        let block_expr = function
+            .or(struct_)
+            .or(if_)
+            .or(raw_expression.clone())
+            .labelled("block");
 
         let block_chain = block_expr
             .clone()
