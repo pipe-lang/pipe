@@ -2,6 +2,8 @@ a = 1 | it
 
 a b = 1 + 2 * 3 / 4 | it | split
 
+a | funcname 22 | works
+
 if [1] - [5 + 1] | resultado
   false
   42
@@ -19,4 +21,4 @@ Pet
   age: Number
 end
 
-one = Pet { name: nemo 1 }
+one = Pet { name: nemo age: 1 }

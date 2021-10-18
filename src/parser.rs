@@ -10,7 +10,7 @@ pub enum Expr {
     Assignation(Vec<String>, Box<Self>),
     Binary(Box<Self>, BinaryOp, Box<Self>),
     Bool(bool),
-    Call(Box<Self>, Vec<Self>),
+    Call(String, Vec<Self>),
     Error,
     Function(String, Params, Box<Expr>),
     If(Box<Self>, Vec<Self>, Vec<Self>),
@@ -65,8 +65,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
             })
             .labelled("value");
 
-            let items = expr.clone().repeated();
-
             let assignees = ident.repeated();
             let assignation = assignees
                 .then_ignore(just(Token::Op("=".to_string())))
@@ -95,10 +93,21 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .then(attributes.delimited_by(Token::Ctrl('{'), Token::Ctrl('}')))
                 .map(|(name, attributes)| Expr::Struct(name, attributes));
 
+            let call = ident
+                .clone()
+                .then(
+                    raw_expression
+                        .clone()
+                        .repeated()
+                        .delimited_by(Token::Ctrl('('), Token::Ctrl(')')),
+                )
+                .map(|(name, args)| Expr::Call(name, args));
+
             let atom = expr
                 .clone()
                 .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
                 .or(val.clone())
+                .or(call)
                 .or(struct_value)
                 .or(assignation)
                 .or(ident.map(Expr::Variable))
@@ -116,25 +125,18 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                     || Expr::Error,
                 ));
 
-            let call = atom
-                .then(
-                    items
-                        .delimited_by(Token::Ctrl('('), Token::Ctrl(')'))
-                        .repeated(),
-                )
-                .foldl(|f, args| Expr::Call(Box::new(f), args));
-
             let op = just(Token::Op("*".to_string()))
                 .to(BinaryOp::Mul)
                 .or(just(Token::Op("/".to_string())).to(BinaryOp::Div));
-            let product = call
+            let product = atom
                 .clone()
-                .then(op.then(call).repeated())
+                .then(op.then(atom).repeated())
                 .foldl(|a, (op, b)| Expr::Binary(Box::new(a), op, Box::new(b)));
 
             let op = just(Token::Op("+".to_string()))
                 .to(BinaryOp::Add)
                 .or(just(Token::Op("-".to_string())).to(BinaryOp::Sub));
+
             let sum = product
                 .clone()
                 .then(op.then(product).repeated())
@@ -152,9 +154,18 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .then(op.then(sum).repeated())
                 .foldl(|a, (op, b)| Expr::Binary(Box::new(a), op, Box::new(b)));
 
+            let call_after_pipe = ident
+                .clone()
+                .then(compare.clone().repeated())
+                .map(|(name, args)| Expr::Call(name, args));
+
             let pipe = compare
                 .clone()
-                .then(just(Token::Pipe).ignore_then(compare).repeated())
+                .then(
+                    just(Token::Pipe)
+                        .ignore_then(call_after_pipe.or(compare))
+                        .repeated(),
+                )
                 .foldl(|left, right| Expr::Pipe(Box::new(left), Box::new(right)));
 
             pipe
