@@ -13,7 +13,7 @@ pub enum Expr {
     Call(String, Vec<Self>),
     Error,
     Function(String, Params, Box<Expr>),
-    If(Box<Self>, Vec<Self>, Vec<Self>),
+    If(Box<Self>, Box<Self>, Box<Self>),
     Num(String),
     Pipe(Box<Self>, Box<Self>),
     Str(String),
@@ -156,7 +156,7 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
             let call_after_pipe = ident
                 .clone()
-                .then(compare.clone().repeated())
+                .then(compare.clone().repeated().at_least(1))
                 .map(|(name, args)| Expr::Call(name, args));
 
             let pipe = compare
@@ -171,20 +171,24 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
             pipe
         });
 
-        let block = expr.clone().repeated();
+        let block = raw_expression
+            .clone()
+            .repeated()
+            .collect::<Vec<Expr>>()
+            .map(|block| Expr::Block(block));
 
         let if_ = just(Token::If)
             .ignore_then(raw_expression.clone())
             .then(block.clone())
             .then(just(Token::Else).ignore_then(block.clone()).or_not())
             .then_ignore(just(Token::End))
-            .map(|((conditional, a), b)| {
+            .map(|((condition, consequent), alternative)| {
                 Expr::If(
-                    Box::new(conditional),
-                    a,
-                    match b {
-                        Some(b) => b,
-                        None => vec![],
+                    Box::new(condition),
+                    Box::new(consequent),
+                    match alternative {
+                        Some(alternative) => Box::new(alternative),
+                        None => Box::new(Expr::Block(Vec::new())),
                     },
                 )
             });
