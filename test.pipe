@@ -21,4 +21,4 @@ Pet
   age: Number
 end
 
-one = Pet { name: nemo age: 1 }
+one = Pet { name: nemo 1 }
