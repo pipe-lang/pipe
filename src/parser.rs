@@ -193,7 +193,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
             .clone()
             .labelled("param name")
             .then(just(Token::Ctrl(':')).ignore_then(kind))
-            .then_ignore(just(Token::Newline).or_not())
             .repeated()
             .labelled("parameters");
 
@@ -215,7 +214,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         let struct_ = kind
             .clone()
             .labelled("struct name")
-            .then_ignore(just(Token::Newline).or_not())
             .then(params.clone().labelled("struct params"))
             .then_ignore(just(Token::End))
             .labelled("struct definition")
@@ -229,7 +227,6 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
 
         let block_chain = block_expr
             .clone()
-            .padded_by(just(Token::Newline).or_not())
             .repeated()
             .at_least(1)
             .collect::<Vec<Expr>>()
