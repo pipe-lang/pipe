@@ -64,13 +64,14 @@ fn main() {
             let report = match e.reason() {
                 chumsky::error::SimpleReason::Unclosed { span, delimiter } => report.with_label(
                     Label::new(span.clone())
-                        .with_message(format!(
-                            "Unclosed delimiter {}",
-                            delimiter.fg(Color::Yellow)
-                        ))
+                        .with_message(format!("Unclosed delimiter {}",delimiter.fg(Color::Yellow)))
                         .with_color(Color::Yellow),
                 ),
                 chumsky::error::SimpleReason::Unexpected => report,
+                chumsky::error::SimpleReason::Custom(msg) => report
+                    .with_label(Label::new(e.span())
+                    .with_message(format!("{}", msg.fg(Color::Yellow)))
+                    .with_color(Color::Yellow)),
             };
 
             report.finish().print(Source::from(&src)).unwrap();
