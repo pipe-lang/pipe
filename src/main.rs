@@ -6,9 +6,6 @@ pub type Span = std::ops::Range<usize>;
 
 mod lexer;
 mod parser;
-mod stage;
-
-use stage::*;
 
 fn main() {
     let src = fs::read_to_string(env::args().nth(1).expect("Expected file argument"))
@@ -24,16 +21,7 @@ fn main() {
             .then_ignore(end())
             .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
-        // println!("{:#?}", ast);
-
-        match ast {
-            Some(ast) => {
-                let ast = unquoted_strings::start(&ast);
-
-                println!("{:#?}", ast);
-            }
-            None => (),
-        }
+        println!("{:#?}", ast);
 
         parse_errs
     } else {
