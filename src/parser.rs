@@ -114,16 +114,16 @@ pub fn expression() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
                 .or(array)
                 .or(expr
                     .clone()
-                    .delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
-                .recover_with(nested_delimiters(
-                    Token::Ctrl('('),
-                    Token::Ctrl(')'),
-                    [
-                        (Token::Ctrl('{'), Token::Ctrl('}')),
-                        (Token::Ctrl('['), Token::Ctrl(']')),
-                    ],
-                    || Expr::Error,
-                ));
+                    .delimited_by(Token::Ctrl('('), Token::Ctrl(')')));
+                // .recover_with(nested_delimiters(
+                //     Token::Ctrl('('),
+                //     Token::Ctrl(')'),
+                //     [
+                //         (Token::Ctrl('{'), Token::Ctrl('}')),
+                //         (Token::Ctrl('['), Token::Ctrl(']')),
+                //     ],
+                //     || Expr::Error,
+                // ));
 
             let op = just(Token::Op("*".to_string()))
                 .to(BinaryOp::Mul)

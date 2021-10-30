@@ -68,7 +68,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     let pipe = just('|').to(Token::Pipe);
 
-    let ident = text::ident().map(|ident| match ident.as_str() {
+    let ident = text::ident().map(|ident: String| match ident.as_str() {
             "and"   => Token::And,
             "check" => Token::Check,
             "else"  => Token::Else,
