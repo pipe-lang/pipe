@@ -9,3 +9,6 @@ edition = "2018"
 ariadne = "0.1.3"
 chumsky = { path = "../chumsky"}
 indoc = "1.0.3"
+
+[dev-dependencies]
+pretty_assertions = "1.0.0"
