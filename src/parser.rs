@@ -1,7 +1,7 @@
 use crate::lexer::{Span, Token};
 use chumsky::prelude::*;
 
-type Params = Vec<(String, String)>;
+type Params = Vec<(String, Option<String>)>;
 pub type Spanned<T> = (T, Span);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -212,7 +212,7 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
         let params = ident
             .clone()
             .labelled("param name")
-            .then(just(Token::Ctrl(':')).ignore_then(kind))
+            .then(just(Token::Ctrl(':')).ignore_then(kind).or_not())
             .repeated()
             .labelled("parameters");
 
