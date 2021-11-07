@@ -12,7 +12,7 @@ pub enum Expr {
     Bool(bool),
     Call(String, Vec<Spanned<Self>>),
     Error,
-    Function(String, Params, Box<Spanned<Self>>),
+    Function(String, Params, Box<Spanned<Self>>, Option<Box<Spanned<Self>>>),
     If(Box<Spanned<Self>>, Box<Spanned<Self>>, Box<Spanned<Self>>),
     Num(String),
     Pipe(Box<Spanned<Self>>, Box<Spanned<Self>>),
@@ -224,10 +224,16 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
                     .clone()
                     .delimited_by(Token::Ctrl('('), Token::Ctrl(')')),
             )
-            .then(expr)
+            .then(expr.clone())
+            .then(just(Token::Check).ignore_then(expr).or_not())
             .then_ignore(just(Token::End))
-            .map_with_span(|((name, params), instructions), span| {
-                (Expr::Function(name, params, Box::new(instructions)), span)
+            .map_with_span(|(((name, params), instructions), check_instructions), span| {
+                let check_instructions = match check_instructions {
+                    Some(spanned_exp) => Some(Box::new(spanned_exp)),
+                    None => None
+                };
+
+                (Expr::Function(name, params, Box::new(instructions), check_instructions), span)
             })
             .labelled("function");
 

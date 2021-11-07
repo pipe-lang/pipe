@@ -20,12 +20,16 @@ pub fn parse(ast: Spanned<Expr>, scope: &mut Scope) -> Spanned<Expr> {
             name.clone(),
             instructions.iter().map(|inst| parse(inst.clone(), scope)).collect(),
         ), span),
-        (Expr::Function(name, params, body), span) => {
+        (Expr::Function(name, params, body, check), span) => {
             scope.push(name.clone());
 
             let body = parse(*body, scope);
+            let check = match check {
+                Some(spanned_expr) => Some(Box::new(parse(*spanned_expr, scope))),
+                None => None
+            };
 
-            (Expr::Function(name.clone(), params.clone(), Box::new(body)), span)
+            (Expr::Function(name.clone(), params.clone(), Box::new(body), check), span)
         }
         (Expr::If(instruction, then, else_), span) => {
             let instruction = parse(*instruction, scope);
