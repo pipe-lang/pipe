@@ -12,7 +12,7 @@ pub fn parse(code: &str) -> Result<Option<Spanned<Expr>>, Vec<Simple<char>>> {
 
     let parse_errs = if let Some(tokens) = tokens {
         let len = code.chars().count();
-        let (ast_result, parse_errs) = parser::expression().then_ignore(end()).parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+        let (ast_result, parse_errs) = parser::module().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
         if parse_errs.len() == 0 {
             if let Some(ast) = ast_result {

@@ -45,7 +45,7 @@ pub enum BinaryOp {
     Xor,
 }
 
-pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
+pub fn module() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
     let ident = filter_map(|span: Span, tok| match tok {
         Token::Ident(ident) => Ok(ident.clone()),
         _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
@@ -63,13 +63,6 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
             Token::Str(s) => Ok(Expr::Str(s)),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
         }).labelled("value");
-
-        let assignees = ident.repeated();
-        let assignation = assignees
-            .then_ignore(just(Token::Op("=".to_string())))
-            .then(raw_expression.clone())
-            .map(|(variables, value)| Expr::Assignation(variables, Box::new(value)))
-            .labelled("assignation");
 
         let array = raw_expression
             .clone()
@@ -102,7 +95,6 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
         let atom = val.clone()
             .or(call)
             .or(struct_value)
-            .or(assignation)
             .or(ident.map(Expr::Variable))
             .or(array)
             .map_with_span(|expr, span| (expr, span))
@@ -165,11 +157,7 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
 
         let pipe = compare
             .clone()
-            .then(
-                just(Token::Pipe)
-                    .ignore_then(call_after_pipe.or(compare))
-                    .repeated(),
-            )
+            .then(just(Token::Pipe).ignore_then(call_after_pipe.or(compare)).repeated())
             .foldl(|left, right| {
                 let span = left.1.start..right.1.end;
                 (Expr::Pipe(Box::new(left), Box::new(right)), span)
@@ -178,25 +166,31 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
         pipe
     });
 
-    let if_ = recursive(|if_| {
-        let block = if_.or(raw_expression.clone()).repeated()
+    let expression = recursive(|expression| {
+        let assignees = ident.repeated();
+        let assignation = assignees
+            .then_ignore(just(Token::Op("=".to_string())))
+            .then(expression.clone())
+            .map_with_span(|(variables, value), span| (Expr::Assignation(variables, Box::new(value)), span))
+            .labelled("assignation");
+
+        let block = expression.clone().repeated()
             .collect::<Vec<Spanned<Expr>>>()
             .map_with_span(|block, span| (Expr::Block(block), span));
 
-        just(Token::If)
-            .ignore_then(raw_expression.clone())
-            .then(block.clone())
-            .then(just(Token::Else).ignore_then(block.clone()).or_not())
-            .then_ignore(just(Token::End))
-            .map_with_span(|((conditional, consequent), alternative), span| {
-                (Expr::If(Box::new(conditional), Box::new(consequent), match alternative {
-                            Some(alternative) => Box::new(alternative),
-                            None => Box::new((Expr::Block(Vec::new()), (0..0))),
-                        }
-                    ),
-                    span
-                )
-            })
+        let if_ = just(Token::If)
+                .ignore_then(raw_expression.clone())
+                .then(block.clone())
+                .then(just(Token::Else).ignore_then(block.clone()).or_not())
+                .then_ignore(just(Token::End))
+                .map_with_span(|((conditional, consequent), alternative), span| {
+                    (Expr::If(Box::new(conditional), Box::new(consequent), match alternative {
+                        Some(alternative) => Box::new(alternative),
+                        None => Box::new((Expr::Block(Vec::new()), (0..0))),
+                    }), span)
+                });
+
+        assignation.or(if_.clone()).or(raw_expression.clone())
     });
 
     let params = ident.clone().labelled("param name")
@@ -204,14 +198,14 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
         .repeated()
         .labelled("parameters");
 
-    let block = if_.clone().or(raw_expression.clone()).repeated()
+    let block = expression.clone().repeated()
         .collect::<Vec<Spanned<Expr>>>()
         .map_with_span(|block, span| (Expr::Block(block), span));
 
     let is = raw_expression.clone().then(just(Token::Is).ignore_then(raw_expression.clone()))
         .map_with_span(|(left, right), span| (Expr::Is(Box::new(left), Box::new(right)), span));
 
-    let check_block = is.or(raw_expression.clone()).repeated()
+    let check_block = is.or(expression.clone()).repeated()
         .collect::<Vec<Spanned<Expr>>>()
         .map_with_span(|block, span| (Expr::Check(block), span));
 
@@ -243,12 +237,11 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
     let block_expr = check.then_ignore(just(Token::End))
         .or(function)
         .or(struct_)
-        .or(if_)
-        .or(raw_expression)
+        .or(expression)
         .labelled("block");
 
     let module = block_expr.clone().repeated().at_least(1)
         .map_with_span(|block, span| (Expr::Module(block), span));
 
-    module
+    module.then_ignore(end())
 }

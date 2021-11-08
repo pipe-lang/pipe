@@ -4,7 +4,7 @@ a b = 1 + 2 * 3 / 4 | it | split
 
 a | funcname 22 | works
 
-if [1] - [5 + 1] | resultado
+foo = if [1] - [5 + 1] | resultado
   false
   42
 else
