@@ -14,6 +14,7 @@ pub enum Expr {
     Error,
     Function(String, Params, Box<Spanned<Self>>, Option<Box<Spanned<Self>>>),
     If(Box<Spanned<Self>>, Box<Spanned<Self>>, Box<Spanned<Self>>),
+    Is(Box<Spanned<Self>>, Box<Spanned<Self>>),
     Num(String),
     Pipe(Box<Spanned<Self>>, Box<Spanned<Self>>),
     Str(String),
@@ -184,9 +185,8 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
             pipe
         });
 
-        let block = raw_expression
-            .clone()
-            .repeated()
+
+        let block = raw_expression.clone().repeated()
             .collect::<Vec<Spanned<Expr>>>()
             .map_with_span(|block, span| (Expr::Block(block), span));
 
@@ -209,23 +209,22 @@ pub fn expression() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> 
                 )
             });
 
-        let params = ident
-            .clone()
-            .labelled("param name")
+        let params = ident.clone().labelled("param name")
             .then(just(Token::Ctrl(':')).ignore_then(kind).or_not())
             .repeated()
             .labelled("parameters");
 
-        let function = ident
-            .clone()
-            .labelled("function name")
-            .then(
-                params
-                    .clone()
-                    .delimited_by(Token::Ctrl('('), Token::Ctrl(')')),
-            )
-            .then(expr.clone())
-            .then(just(Token::Check).ignore_then(expr).or_not())
+        let is = raw_expression.clone().then(just(Token::Is).ignore_then(raw_expression.clone()))
+            .map_with_span(|(left, right), span| (Expr::Is(Box::new(left), Box::new(right)), span));
+
+        let check_block = is.or(raw_expression.clone()).repeated()
+            .collect::<Vec<Spanned<Expr>>>()
+            .map_with_span(|block, span| (Expr::Block(block), span));
+
+        let function = ident.clone().labelled("function name")
+            .then(params.clone().delimited_by(Token::Ctrl('('), Token::Ctrl(')')))
+            .then(block.clone())
+            .then(just(Token::Check).ignore_then(check_block).or_not())
             .then_ignore(just(Token::End))
             .map_with_span(|(((name, params), instructions), check_instructions), span| {
                 let check_instructions = match check_instructions {

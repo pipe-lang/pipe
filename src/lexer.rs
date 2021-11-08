@@ -21,6 +21,7 @@ pub enum Token {
     Xor,
     Pipe,
     End,
+    Is,
 }
 
 impl fmt::Display for Token {
@@ -42,6 +43,7 @@ impl fmt::Display for Token {
             Token::Xor => write!(f, "xor"),
             Token::Pipe => write!(f, "|"),
             Token::End => write!(f, "end"),
+            Token::Is => write!(f, "is"),
         }
     }
 }
@@ -76,6 +78,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
             "eq"    => Token::Eq,
             "false" => Token::Bool(false),
             "if"    => Token::If,
+            "is"    => Token::Is,
             "or"    => Token::Or,
             "true"  => Token::Bool(true),
             "xor"   => Token::Xor,
