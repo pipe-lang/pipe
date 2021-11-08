@@ -54,10 +54,10 @@ pub fn parse(ast: Spanned<Expr>, scope: &mut Scope) -> Spanned<Expr> {
 
             (Expr::Check(instructions), span)
         }
-        (Expr::Module(instructions), span) => {
+        (Expr::Module(name, instructions), span) => {
             let instructions = instructions.iter().map(|inst| parse(inst.clone(), scope)).collect();
 
-            (Expr::Module(instructions), span)
+            (Expr::Module(name, instructions), span)
         }
         (Expr::Variable(name), span) => {
             if scope.into_iter().any(|function| *function == name ) {

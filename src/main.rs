@@ -1,10 +1,9 @@
 use std::{env, fs};
+use std::path::Path;
 use pipe::*;
 
 pub fn main() {
-    let src = fs::read_to_string(env::args().nth(1).expect("Expected file argument")).expect("Failed to read file");
+    let file_name = env::args().nth(1).expect("Expected file argument");
 
-    if let Ok(ast) = parse(&src) {
-        println!("{:?}", ast);
-    }
+    run(&file_name)
 }

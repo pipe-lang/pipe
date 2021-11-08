@@ -1,27 +1,29 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::{prelude::*, stream::Stream};
+use std::path::Path;
+use std::fs;
 
 pub mod lexer;
 pub mod parser;
 pub mod call;
+pub mod wasm;
 
-use parser::*;
-
-pub fn parse(code: &str) -> Result<Option<Spanned<Expr>>, Vec<Simple<char>>> {
+pub fn parse(module_name: &str, code: &str) -> Result<String, Vec<Simple<char>>> {
     let (tokens, errs) = lexer::lexer().parse_recovery(code);
 
     let parse_errs = if let Some(tokens) = tokens {
         let len = code.chars().count();
-        let (ast_result, parse_errs) = parser::module().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+        let (ast_result, parse_errs) = parser::module(module_name)
+            .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
         if parse_errs.len() == 0 {
             if let Some(ast) = ast_result {
-                let ast = call::find(ast);
+                let (ast, _span) = call::find(ast);
 
-                return Ok(Some(ast))
+                let wasm_code = wasm::convert(&ast);
+
+                return Ok(wasm_code)
             }
-
-            return Ok(ast_result);
         }
 
         parse_errs
@@ -79,4 +81,12 @@ pub fn parse(code: &str) -> Result<Option<Spanned<Expr>>, Vec<Simple<char>>> {
         });
 
     Err(errs)
+}
+
+pub fn run(file_name: &str) {
+    let src = fs::read_to_string(&file_name).expect("Failed to read file");
+    let module = Path::new(&file_name).file_stem().unwrap().to_str().unwrap();
+    if let Ok(wasm) = parse(module, &src) {
+        wasm::run(&wasm);
+    }
 }

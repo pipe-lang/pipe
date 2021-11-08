@@ -1,5 +1,6 @@
 use crate::lexer::{Span, Token};
 use chumsky::prelude::*;
+use std::fmt;
 
 type Params = Vec<(String, Option<String>)>;
 pub type Spanned<T> = (T, Span);
@@ -22,7 +23,7 @@ pub enum Expr {
     StructDef(String, Params),
     Block(Vec<Spanned<Self>>),
     Check(Vec<Spanned<Self>>),
-    Module(Vec<Spanned<Self>>),
+    Module(String, Vec<Spanned<Self>>),
     Variable(String),
 }
 
@@ -45,7 +46,23 @@ pub enum BinaryOp {
     Xor,
 }
 
-pub fn module() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+           BinaryOp::Add   => write!(f, "add"),
+           BinaryOp::And   => write!(f, "and"),
+           BinaryOp::Div   => write!(f, "div"),
+           BinaryOp::Eq    => write!(f, "eq"),
+           BinaryOp::Mul   => write!(f, "mul"),
+           BinaryOp::NotEq => write!(f, "ne"),
+           BinaryOp::Or    => write!(f, "or"),
+           BinaryOp::Sub   => write!(f, "sub"),
+           BinaryOp::Xor   => write!(f, "xor"),
+        }
+    }
+}
+
+pub fn module<'a>(module_name: &'a str) -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone + 'a {
     let identifier = filter_map(|span: Span, tok| match tok {
         Token::Ident(identifier) => Ok(identifier.clone()),
         _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
@@ -227,7 +244,7 @@ pub fn module() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Cl
         .or(expression);
 
     let module = module_block.clone().repeated().at_least(1)
-        .map_with_span(|block, span| (Expr::Module(block), span));
+        .map_with_span(move |block, span| (Expr::Module(module_name.to_string(), block), span));
 
     module.then_ignore(end())
 }
