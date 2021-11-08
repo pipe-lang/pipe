@@ -49,6 +49,16 @@ pub fn parse(ast: Spanned<Expr>, scope: &mut Scope) -> Spanned<Expr> {
 
             (Expr::Block(instructions), span)
         }
+        (Expr::Check(instructions), span) => {
+            let instructions = instructions.iter().map(|inst| parse(inst.clone(), scope)).collect();
+
+            (Expr::Check(instructions), span)
+        }
+        (Expr::Module(instructions), span) => {
+            let instructions = instructions.iter().map(|inst| parse(inst.clone(), scope)).collect();
+
+            (Expr::Module(instructions), span)
+        }
         (Expr::Variable(name), span) => {
             if scope.into_iter().any(|function| *function == name ) {
                 (Expr::Call(name, vec![]), span)

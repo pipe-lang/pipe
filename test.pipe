@@ -15,10 +15,27 @@ end
 
 [1 + 1] + [2 - [1]]
 
-
 Pet
   name: String
   age: Number
 end
 
 one = Pet { name: nemo 1 }
+
+add(a b)
+  a + b
+check
+  1 | add 2 is 3
+  5 | add 1 is 6
+end
+
+double(it)
+  it * 2
+check
+  2  | double is 4
+  10 | double is 20
+end
+
+check
+  2 | double | add 2 is 6
+end

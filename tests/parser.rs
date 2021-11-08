@@ -9,7 +9,7 @@ use pretty_assertions::{assert_eq, assert_ne};
 fn parse_number() {
     let code = "42";
 
-    let expt = (Expr::Block(vec![(Expr::Num("42".to_string()) , 0..2)]), 0..2);
+    let expt = (Expr::Module(vec![(Expr::Num("42".to_string()) , 0..2)]), 0..2);
 
     assert_eq!(parse(code), Ok(Some(expt)))
 }
@@ -18,7 +18,7 @@ fn parse_number() {
 fn parse_string() {
     let code = "\"hola\"";
 
-    let expt = (Expr::Block(vec![(Expr::Str("hola".to_string()) , 0..6)]), 0..6);
+    let expt = (Expr::Module(vec![(Expr::Str("hola".to_string()) , 0..6)]), 0..6);
 
     assert_eq!(parse(code), Ok(Some(expt)))
 }
@@ -31,18 +31,18 @@ fn method() {
       end
     "};
 
-    let expt = (Expr::Block(
-            vec![
+    let expt = (Expr::Module(vec![
                 (
                     Expr::Function("add".to_string(), vec![("lhs".to_string(), None), ("rhs".to_string(), None)],
-                    Box::new(
-                        (Expr::Block(vec![
-                            (Expr::Binary(
-                                Box::new((Expr::Variable("lhs".to_string()), 15..18)),
-                                BinaryOp::Add,
-                                Box::new((Expr::Variable("rhs".to_string()), 21..24))
-                            ), 15..24)
-                        ]), 15..24))
+                        Box::new(
+                            (Expr::Block(vec![
+                                (Expr::Binary(
+                                    Box::new((Expr::Variable("lhs".to_string()), 15..18)),
+                                    BinaryOp::Add,
+                                    Box::new((Expr::Variable("rhs".to_string()), 21..24))
+                                ), 15..24)
+                            ]), 15..24)),
+                        None
                     )
                     ,0..28
                 )
@@ -62,13 +62,14 @@ fn method_call() {
       ten
     "};
 
-    let expt = (Expr::Block(
+    let expt = (Expr::Module(
             vec![
                 (Expr::Function("ten".to_string(), vec![],
                     Box::new(
                         (Expr::Block(vec![
                             (Expr::Num("10".to_string()), 8..10)
-                        ]), 8..10))
+                        ]), 8..10)),
+                    None,
                     ) ,0..14),
                 (Expr::Call("ten".to_string(), vec![]), 16..19)
             ])
