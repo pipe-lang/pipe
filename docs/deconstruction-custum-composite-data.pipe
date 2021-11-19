@@ -1,0 +1,57 @@
+```julia
+> @data Color begin
+ RGB(r::Int, g::Int, b::Int)
+ Gray(Int)
+end
+
+> # treating those types as records for more flexible pattern matching
+
+> @as_record RGB
+
+> @as_record Gray
+
+> color_to_int(x) = @match x begin
+   RGB(;r, g, b) => 16 + b + 6g + 36r  $ TYPO ";r" ??
+   Gray(i)       => 232 + i
+end
+= color_to_int (generic function with 1 method)
+
+> RGB(200, 0, 200) |> color_to_int
+= 7416
+
+> Gray(10)         |> color_to_int
+= 242
+```
+Rgb
+  r: Number
+  g: Number
+  b: Number
+end
+
+Gray
+  it: Number
+end
+
+RGB
+  Number Number Number
+end
+
+Gray
+  Number
+end
+
+color-to-init(color: RGB)
+  color | 16 + b + 6g + 36r  # 6g = 6 * g?
+end
+
+color-to-init(color: Gray)
+  color | 232 + it
+end
+
+RGB | 200 0 200 | color-to-int
+7416
+
+Gray | 10 | color-to-int
+242
+
+# Leaning towards not having to use match
