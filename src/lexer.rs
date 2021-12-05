@@ -60,13 +60,9 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .collect::<String>()
         .map(Token::Str);
 
-    let op = one_of("+-*/=".chars())
-        .repeated()
-        .at_least(1)
-        .collect::<String>()
-        .map(Token::Op);
+    let op = one_of("+-*/=").repeated().at_least(1).collect::<String>().map(Token::Op);
 
-    let ctrl = one_of("()[]{}:".chars()).map(|c| Token::Ctrl(c));
+    let ctrl = one_of("()[]{}:").map(|c| Token::Ctrl(c));
 
     let pipe = just('|').to(Token::Pipe);
 
@@ -96,7 +92,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .or(ident)
         .recover_with(skip_then_retry_until([]));
 
-    let comment = seq("//".chars()).then(take_until(just('\n'))).padded();
+    let comment = just("//").then(take_until(just('\n'))).padded();
 
     token
         .padded_by(comment.repeated())
